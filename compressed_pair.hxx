@@ -6,8 +6,8 @@
 // template arguments are empty classes, then the "empty base-class
 // optimization" is applied to compress the size of the pair.
 
-#ifndef __COMPRESSED_PAIR_1_HXX__
-#define __COMPRESSED_PAIR_1_HXX__
+#ifndef __COMPRESSED_PAIR_HXX__
+#define __COMPRESSED_PAIR_HXX__
 
 #include <tuple>
 #include <type_traits>
@@ -16,15 +16,15 @@
 namespace detail {
 
 // type trait to test if a class is a specialization of another class
-template <template <typename...> class Template, typename T>
-struct is_specialization_of : public std::false_type {};
+template <typename, template <typename...> class>
+struct is_specialization_of: public std::false_type {};
 
-template <template <typename...> class Template, typename... Args>
-struct is_specialization_of<Template, Template<Args...>>
-    : public std::true_type {};
+template <template <typename...> class Primary, typename... ARGS>
+struct is_specialization_of<Primary<ARGS...>, Primary>: public std::true_type {};
 
-template <template <typename...> class Template, typename T>
-concept specialization_of = is_specialization_of<Template, T>::value;
+template <typename T, template<typename...> class Primary>
+concept specialization_of = is_specialization_of<typename std::decay<T>::type, Primary>::value;
+
 
 // unpack a std::tuple into a type trait and use its value.
 // for cv std::tuple<U> the result is Trait<T, cv U...>::value.
@@ -72,6 +72,7 @@ public:
 
 
 public:
+    // Default constructor. Value-initializes both elements of the pair, first and second
     constexpr compressed_pair_impl() noexcept(
         std::conjunction<std::is_nothrow_default_constructible<T1>,
                          std::is_nothrow_default_constructible<T2>>::value)
@@ -81,11 +82,12 @@ public:
     {
     }
 
+    // Initializes m_first with first and m_second with second
+    // This constructor participates in overload resolution if and only if 
+    // std::is_copy_constructible<T> and std::is_copy_constructible<U> are both true
     constexpr compressed_pair_impl(
         const first_type& first,
-        const second_type&
-            second) noexcept(std::
-                                 conjunction<
+        const second_type& second) noexcept(std::conjunction<
                                      std::is_nothrow_copy_constructible<T1>,
                                      std::is_nothrow_copy_constructible<T2>>::
                                      value)
@@ -95,6 +97,9 @@ public:
     {
     }
 
+    // Initializes m_first with std::forward<U1>(first) and m_second with std::forward<U2>(second).
+    // This constructor participates in overload resolution if and only if
+    // std::is_constructible<T1, U1> and std::is_constructible<T2, U2> are both true.
     template <typename U1, typename U2>
     constexpr compressed_pair_impl(U1&& first, U2&& second) noexcept(
         std::conjunction<std::is_nothrow_constructible<T1, U1>,
@@ -106,19 +111,16 @@ public:
     {
     }
 
+    // Forwards the elements of tuple1 to the constructor of m_first
+    // and forwards the elements of tuple2 to the constructor of m_second.
     template <template <typename...> class Tuple1, typename... Ts1,
               template <typename...> class Tuple2, typename... Ts2>
-    constexpr compressed_pair_impl(
-        std::piecewise_construct_t, const Tuple1<Ts1...>& tuple1,
-        const Tuple2<Ts2...>&
-            tuple2) noexcept(std::
-                                 conjunction<
-                                     std::is_nothrow_constructible<T1, Ts1...>,
-                                     std::is_nothrow_constructible<
-                                         T2, Ts2...>>::value)
+    constexpr compressed_pair_impl( std::piecewise_construct_t, const Tuple1<Ts1...>& tuple1, const Tuple2<Ts2...>& tuple2)
+        noexcept(std::conjunction<std::is_nothrow_constructible<T1, Ts1...>,
+                                  std::is_nothrow_constructible<T2, Ts2...>>::value)
         requires(std::conjunction<
-                    detail::is_specialization_of<std::tuple, Tuple1<Ts1...>>,
-                    detail::is_specialization_of<std::tuple, Tuple2<Ts2...>>,
+                    detail::is_specialization_of<Tuple1<Ts1...>, std::tuple>,
+                    detail::is_specialization_of<Tuple2<Ts2...>, std::tuple>,
                     std::is_constructible<T1, Ts1...>,
                     std::is_constructible<T2, Ts2...>>::value)
         : m_first(std::make_from_tuple<first_type>(tuple1))
@@ -127,18 +129,13 @@ public:
     }
 
     //    template <typename Tuple1, typename Tuple2>
-    //    constexpr compressed_pair_impl(
-    //        std::piecewise_construct_t, Tuple1&& tuple1,
-    //        Tuple2&&
-    //            tuple2) noexcept(std::
-    //                                 conjunction<
-    //                                     unpack_tuple<std::is_nothrow_constructible,
-    //                                                  T1, Tuple1>,
-    //                                     unpack_tuple<std::is_nothrow_constructible,
-    //                                                  T2, Tuple2>>::value)
+    //    constexpr compressed_pair_impl( std::piecewise_construct_t, Tuple1&& tuple1, Tuple2&& tuple2)
+    //        noexcept(std::conjunction<
+    //                             unpack_tuple<std::is_nothrow_constructible,T1, Tuple1>,
+    //                             unpack_tuple<std::is_nothrow_constructible,T2, Tuple2>>::value)
     //        requires(std::conjunction<
-    //                 detail::is_specialization_of<std::tuple, Tuple1>,
-    //                 detail::is_specialization_of<std::tuple, Tuple2>,
+    //                 detail::is_specialization_of<Tuple1, std::tuple>,
+    //                 detail::is_specialization_of<Tuple2, std::tuple>,
     //                 unpack_tuple<std::is_constructible, T1, Tuple1>,
     //                 unpack_tuple<std::is_constructible, T2, Tuple2>>::value)
     //        : m_first( std::make_from_tuple<first_type>(tuple1) )
@@ -148,11 +145,20 @@ public:
 
 
 public:
-    constexpr auto first() const noexcept -> const first_type& { return m_first; }
-    constexpr auto first()       noexcept ->       first_type& { return m_first; }
+    // access first element of a pair
+    constexpr auto first() const&  noexcept -> const first_type&  { return m_first; }
+    constexpr auto first()    &    noexcept ->       first_type&  { return m_first; }
 
-    constexpr auto second() const noexcept -> const second_type& { return m_second; }
-    constexpr auto second()       noexcept ->       second_type& { return m_second; }
+    constexpr auto first() const&& noexcept -> const first_type&& { return std::move(m_first); }
+    constexpr auto first()   &&    noexcept ->       first_type&& { return std::move(m_first); }
+
+
+    // access second element of a pair
+    constexpr auto second() const&  noexcept -> const second_type& { return m_second; }
+    constexpr auto second()   &     noexcept ->       second_type& { return m_second; }
+    
+    constexpr auto second() const&& noexcept -> const second_type&& { return std::move(m_second); }
+    constexpr auto second()   &&    noexcept ->       second_type&& { return std::move(m_second); }
 
 
 public:
@@ -184,6 +190,7 @@ public:
 
 
 public:
+    // Default constructor. Value-initializes both elements of the pair, first and second
     constexpr compressed_pair_impl() noexcept(
         std::conjunction<std::is_nothrow_default_constructible<T1>,
                          std::is_nothrow_default_constructible<T2>>::value)
@@ -193,6 +200,9 @@ public:
     {
     }
 
+    // Initializes m_second with second
+    // This constructor participates in overload resolution if and only if 
+    // std::is_default_constructible<T> and std::is_copy_constructible<U> are both true
     constexpr compressed_pair_impl(const second_type& second) noexcept(
         std::conjunction<std::is_nothrow_default_constructible<T1>,
                          std::is_nothrow_copy_constructible<T2>>::value)
@@ -202,20 +212,21 @@ public:
     {
     }
 
-    constexpr compressed_pair_impl(
-        const first_type& first,
-        const second_type&
-            second) noexcept(std::
-                                 conjunction<
-                                     std::is_nothrow_copy_constructible<T1>,
-                                     std::is_nothrow_copy_constructible<T2>>::
-                                     value)
+    // Initializes m_first with first and m_second with second
+    // This constructor participates in overload resolution if and only if 
+    // std::is_copy_constructible<T> and std::is_copy_constructible<U> are both true
+    constexpr compressed_pair_impl(const first_type& first, const second_type& second)
+        noexcept(std::conjunction<std::is_nothrow_copy_constructible<T1>,
+                                  std::is_nothrow_copy_constructible<T2>>::value)
         requires(std::conjunction<std::is_copy_constructible<T1>,
                                   std::is_copy_constructible<T2>>::value)
         : T1(first), m_second(second)
     {
     }
 
+    // Initializes m_first with std::forward<U1>(first) and m_second with std::forward<U2>(second).
+    // This constructor participates in overload resolution if and only if
+    // std::is_constructible<T1, U1> and std::is_constructible<T2, U2> are both true.
     template <typename U1, typename U2>
     constexpr compressed_pair_impl(U1&& first, U2&& second) noexcept(
         std::conjunction<std::is_nothrow_constructible<T1, U1>,
@@ -227,17 +238,13 @@ public:
     {
     }
 
+    // Forwards the elements of tuple to the constructor of m_second
     template <template <typename...> class Tuple, typename... ARGS>
-    constexpr compressed_pair_impl(
-        std::piecewise_construct_t,
-        const Tuple<ARGS...>&
-            tuple) noexcept(std::
-                                conjunction<
-                                    std::is_nothrow_default_constructible<T1>,
-                                    std::is_nothrow_constructible<
-                                        T2, ARGS...>>::value)
+    constexpr compressed_pair_impl(std::piecewise_construct_t,const Tuple<ARGS...>& tuple)
+        noexcept(std::conjunction<std::is_nothrow_default_constructible<T1>,
+                                  std::is_nothrow_constructible< T2, ARGS...>>::value)
         requires(std::conjunction<
-                    detail::is_specialization_of<std::tuple, Tuple<ARGS...>>,
+                    detail::is_specialization_of<Tuple<ARGS...>, std::tuple>,
                     std::is_default_constructible<T1>,
                     std::is_constructible<T2, ARGS...>>::value)
         : T1(), m_second(std::make_from_tuple<second_type>(tuple)) 
@@ -246,11 +253,16 @@ public:
 
 
 public:
+    // access first element of a pair
     constexpr auto first() const noexcept -> const first_type& { return *this; }
     constexpr auto first()       noexcept ->       first_type& { return *this; }
 
-    constexpr auto second() const noexcept -> const second_type& { return m_second; }
-    constexpr auto second()       noexcept ->       second_type& { return m_second; }
+    // access second element of a pair
+    constexpr auto second() const&  noexcept -> const second_type& { return m_second; }
+    constexpr auto second()   &     noexcept ->       second_type& { return m_second; }
+    
+    constexpr auto second() const&& noexcept -> const second_type&& { return std::move(m_second); }
+    constexpr auto second()   &&    noexcept ->       second_type&& { return std::move(m_second); }
 
 
 public:
@@ -278,6 +290,7 @@ public:
 
 
 public:
+    // Default constructor. Value-initializes both elements of the pair, first and second
     constexpr compressed_pair_impl() noexcept(
         std::conjunction<std::is_nothrow_default_constructible<T1>,
                          std::is_nothrow_default_constructible<T2>>::value)
@@ -287,6 +300,9 @@ public:
     {
     }
 
+    // Initializes m_first with first
+    // This constructor participates in overload resolution if and only if 
+    // std::is_copy_constructible<T1> and std::is_default_constructible<T2> are both true
     constexpr compressed_pair_impl(const first_type& first) noexcept(
         std::conjunction<std::is_nothrow_copy_constructible<T1>,
                          std::is_nothrow_default_constructible<T2>>::value)
@@ -296,20 +312,21 @@ public:
     {
     }
 
-    constexpr compressed_pair_impl(
-        const first_type& first,
-        const second_type&
-            second) noexcept(std::
-                                 conjunction<
-                                     std::is_nothrow_copy_constructible<T1>,
-                                     std::is_nothrow_copy_constructible<T2>>::
-                                     value)
+    // Initializes m_first with first and m_second with second
+    // This constructor participates in overload resolution if and only if 
+    // std::is_copy_constructible<T1> and std::is_copy_constructible<T2> are both true
+    constexpr compressed_pair_impl(const first_type& first,const second_type& second)
+        noexcept(std::conjunction<std::is_nothrow_copy_constructible<T1>,
+                                  std::is_nothrow_copy_constructible<T2>>::value)
         requires(std::conjunction<std::is_copy_constructible<T1>,
                                   std::is_copy_constructible<T2>>::value)
         : T2(second), m_first(first)
     {
     }
 
+    // Initializes m_first with std::forward<U1>(first) and m_second with std::forward<U2>(second).
+    // This constructor participates in overload resolution if and only if
+    // std::is_constructible<T1, U1> and std::is_constructible<T2, U2> are both true.
     template <typename U1, typename U2>
     constexpr compressed_pair_impl(U1&& first, U2&& second) noexcept(
         std::conjunction<std::is_nothrow_constructible<T1, U1>,
@@ -321,17 +338,13 @@ public:
     {
     }
 
+    // Forwards the elements of tuple1 to the constructor of m_first
     template <template <typename...> class Tuple, typename... ARGS>
-    constexpr compressed_pair_impl(
-        std::piecewise_construct_t,
-        const Tuple<ARGS...>&
-            tuple) noexcept(std::
-                                conjunction<
-                                    std::is_nothrow_constructible<T1, ARGS...>,
-                                    std::is_nothrow_default_constructible<T2>>::
-                                    value)
+    constexpr compressed_pair_impl( std::piecewise_construct_t, const Tuple<ARGS...>& tuple)
+        noexcept(std::conjunction<std::is_nothrow_constructible<T1, ARGS...>,
+                                  std::is_nothrow_default_constructible<T2>>::value)
         requires(std::conjunction<
-                    detail::is_specialization_of<std::tuple, Tuple<ARGS...>>,
+                    detail::is_specialization_of<Tuple<ARGS...>, std::tuple>,
                     std::is_constructible<T1, ARGS...>,
                     std::is_default_constructible<T2>>::value)
         : T2(), m_first(std::make_from_tuple<first_type>(tuple))
@@ -340,8 +353,13 @@ public:
 
 
 public:
-    constexpr auto first() const noexcept -> const first_type& { return m_first; }
-    constexpr auto first()       noexcept ->       first_type& { return m_first; }
+    // access first element of a pair
+    constexpr auto first() const&  noexcept -> const first_type&  { return m_first; }
+    constexpr auto first()    &    noexcept ->       first_type&  { return m_first; }
+
+    constexpr auto first() const&& noexcept -> const first_type&& { return std::move(m_first); }
+    constexpr auto first()   &&    noexcept ->       first_type&& { return std::move(m_first); }
+
 
     constexpr auto second() const noexcept -> const second_type& { return *this; }
     constexpr auto second()       noexcept ->       second_type& { return *this; }
@@ -374,6 +392,7 @@ public:
 
 
 public:
+    //  Default constructor. Value-initializes both elements of the pair, first and second
     constexpr compressed_pair_impl() noexcept(
         std::conjunction<std::is_nothrow_default_constructible<T1>,
                          std::is_nothrow_default_constructible<T2>>::value)
@@ -383,20 +402,21 @@ public:
     {
     }
 
-    constexpr compressed_pair_impl(
-        const first_type& first,
-        second_type&
-            second) noexcept(std::
-                                 conjunction<
-                                     std::is_nothrow_copy_constructible<T1>,
-                                     std::is_nothrow_copy_constructible<T2>>::
-                                     value)
+    // Initializes m_first with first and m_second with second
+    // This constructor participates in overload resolution if and only if 
+    // std::is_copy_constructible<T> and std::is_copy_constructible<U> are both true
+    constexpr compressed_pair_impl(const first_type& first, const second_type& second)
+        noexcept(std::conjunction<std::is_nothrow_copy_constructible<T1>,
+                                  std::is_nothrow_copy_constructible<T2>>::value)
         requires(std::conjunction<std::is_copy_constructible<T1>,
                                   std::is_copy_constructible<T2>>::value)
         : T1(first), T2(second)
     {
     }
 
+    // Initializes m_first with std::forward<E>(first) and m_second with std::forward<F>(second).
+    // This constructor participates in overload resolution if and only if
+    // std::is_constructible<T, E> and std::is_constructible<U, F> are both true.
     template <typename U1, typename U2>
     constexpr compressed_pair_impl(U1&& first, U2&& second) noexcept(
         std::conjunction<std::is_nothrow_constructible<T1, U1>,
@@ -410,9 +430,11 @@ public:
 
 
 public:
+    // access first element of a pair
     constexpr auto first() const noexcept -> const first_type& { return *this; }
     constexpr auto first()       noexcept ->       first_type& { return *this; }
 
+    // access second element of a pair
     constexpr auto second() const noexcept -> const second_type& { return *this; }
     constexpr auto second()       noexcept ->       second_type& { return *this; }
 
@@ -451,6 +473,7 @@ public:
     using base_t::compressed_pair_impl;
 
 public:
+    // Copy constructor
     constexpr compressed_pair(const compressed_pair& other) noexcept(
         std::conjunction<std::is_nothrow_copy_constructible<T1>,
                          std::is_nothrow_copy_constructible<T2>>::value)
@@ -460,6 +483,7 @@ public:
     {
     }
 
+    // Move constructor
     constexpr compressed_pair(compressed_pair&& other) noexcept(
         std::conjunction<std::is_nothrow_move_constructible<T1>,
                          std::is_nothrow_move_constructible<T2>>::value)
@@ -469,6 +493,7 @@ public:
     {
     }
 
+    // Copy assignment operator
     constexpr auto operator=(const compressed_pair& rhs) noexcept(
         std::conjunction<std::is_nothrow_copy_assignable<T1>,
                          std::is_nothrow_copy_assignable<T2>>::value)
@@ -482,6 +507,7 @@ public:
         return *this;
     }
 
+    // Move assignment operator
     constexpr auto operator=(compressed_pair&& rhs) noexcept(
         std::conjunction<std::is_nothrow_move_assignable<T1>,
                          std::is_nothrow_move_assignable<T2>>::value)
@@ -497,11 +523,21 @@ public:
 
 
 public:
-    constexpr auto first() const noexcept -> const first_type& { return base_t::first(); }
-    constexpr auto first()       noexcept ->       first_type& { return base_t::first(); }
 
-    constexpr auto second() const noexcept -> const second_type& { return base_t::second(); }
-    constexpr auto second()       noexcept ->       second_type& { return base_t::second(); }
+    // access first element of a pair
+    constexpr auto first() const&  noexcept -> const first_type&  { return base_t::first(); }
+    constexpr auto first()    &    noexcept ->       first_type&  { return base_t::first(); }
+
+    constexpr auto first() const&& noexcept -> const first_type&& { return base_t::first(); }
+    constexpr auto first()   &&    noexcept ->       first_type&& { return base_t::first(); }
+
+
+    // access second element of a pair
+    constexpr auto second() const&  noexcept -> const second_type& { return base_t::second(); }
+    constexpr auto second()   &     noexcept ->       second_type& { return base_t::second(); }
+    
+    constexpr auto second() const&& noexcept -> const second_type&& { return base_t::second(); }
+    constexpr auto second()   &&    noexcept ->       second_type&& { return base_t::second(); }
 
 public:
     void swap(compressed_pair& other) noexcept(
@@ -516,13 +552,22 @@ public:
 
 
 
-// lexicographically compares the values in the pair 
+// lexicographically compares the values in the compressed_pair ( Equality and Ordering Operators )
+
+template <std::totally_ordered T, std::totally_ordered_with<T> U>
+constexpr auto lexicographical_compare(const compressed_pair<T, U>& lhs,
+                                       const compressed_pair<T, U>& rhs) noexcept -> bool
+{
+    return std::tie(lhs.first(), lhs.second()) <
+           std::tie(rhs.first(), rhs.second());
+}
 
 template <std::equality_comparable T, std::equality_comparable_with<T> U>
 constexpr auto operator==(const compressed_pair<T, U>& lhs,
                           const compressed_pair<T, U>& rhs) noexcept -> bool
 {
-    return ((lhs.first() == rhs.first()) and (lhs.second() == rhs.second()));
+    return std::tie(lhs.first(), lhs.second()) ==
+           std::tie(rhs.first(), rhs.second());
 }
 
 template <std::equality_comparable T, std::equality_comparable_with<T> U>
@@ -536,10 +581,7 @@ template <std::totally_ordered T, std::totally_ordered_with<T> U>
 constexpr auto operator>(const compressed_pair<T, U>& lhs,
                          const compressed_pair<T, U>& rhs) noexcept -> bool
 {
-    if (lhs.first() > rhs.first()) { return true; }
-    if (rhs.first() > lhs.first()) { return false; }
-
-    return lhs.second() > rhs.second();
+    return lexicographical_compare(rhs, lhs);
 }
 
 template <std::totally_ordered T, std::totally_ordered_with<T> U>
@@ -553,17 +595,14 @@ template <std::totally_ordered T, std::totally_ordered_with<T> U>
 constexpr auto operator<(const compressed_pair<T, U>& lhs,
                          const compressed_pair<T, U>& rhs) noexcept -> bool
 {
-    if (lhs.first() < rhs.first()) { return true; }
-    if (rhs.first() < lhs.first()) { return false; }
-
-    return lhs.second() < rhs.second();
+    return lexicographical_compare(lhs, rhs);
 }
 
 template <std::totally_ordered T, std::totally_ordered_with<T> U>
 constexpr auto operator<=(const compressed_pair<T, U>& lhs,
                           const compressed_pair<T, U>& rhs) noexcept -> bool
 {
-    return not(lhs > rhs);
+    return not(rhs < lhs);
 }
 
 
@@ -580,37 +619,13 @@ struct tuple_element<Index, ::compressed_pair<T, U>> : public tuple_element<Inde
 
 }  // namespace std
 
-template <std::size_t Index, typename T1, typename T2>
-constexpr auto get(compressed_pair<T1, T2>& my_pair) ->
-    typename std::tuple_element<Index, compressed_pair<T1, T2>>::type&
-{
-    if constexpr (Index == 0) return my_pair.first();
-    if constexpr (Index == 1) return my_pair.second();
-}
 
-template <std::size_t Index, typename T1, typename T2>
-constexpr auto get(const compressed_pair<T1, T2>& my_pair) ->
-    typename std::tuple_element<Index, compressed_pair<T1, T2>>::type const&
+template <std::size_t Index, detail::specialization_of<::compressed_pair> Compressed_Pair>
+constexpr auto get(Compressed_Pair&& pair) noexcept 
+    -> typename std::tuple_element<Index, typename std::decay<Compressed_Pair>::type>::type
 {
-    if constexpr (Index == 0) return my_pair.first();
-    if constexpr (Index == 1) return my_pair.second();
+    if constexpr ( Index == 0 ) return std::forward<Compressed_Pair>(pair).first();
+    if constexpr ( Index == 1 ) return std::forward<Compressed_Pair>(pair).second();
 }
-
-template <std::size_t Index, typename T1, typename T2>
-constexpr auto get(compressed_pair<T1, T2>&& my_pair) ->
-    typename std::tuple_element<Index, compressed_pair<T1, T2>>::type&&
-{
-    if constexpr (Index == 0) return std::move(my_pair.first());
-    if constexpr (Index == 1) return std::move(my_pair.second());
-}
-
-template <std::size_t Index, typename T1, typename T2>
-constexpr auto get(const compressed_pair<T1, T2>&& my_pair) ->
-    typename std::tuple_element<Index, compressed_pair<T1, T2>>::type const&&
-{
-    if constexpr (Index == 0) return std::move(my_pair.first());
-    if constexpr (Index == 1) return std::move(my_pair.second());
-}
-
 #endif
 
