@@ -515,6 +515,60 @@ public:
 };
 
 
+
+// lexicographically compares the values in the pair 
+
+template <std::equality_comparable T, std::equality_comparable_with<T> U>
+constexpr auto operator==(const compressed_pair<T, U>& lhs,
+                          const compressed_pair<T, U>& rhs) noexcept -> bool
+{
+    return ((lhs.first() == rhs.first()) and (lhs.second() == rhs.second()));
+}
+
+template <std::equality_comparable T, std::equality_comparable_with<T> U>
+constexpr auto operator!=(const compressed_pair<T, U>& lhs,
+                          const compressed_pair<T, U>& rhs) noexcept -> bool
+{
+    return not(lhs == rhs);
+}
+
+template <std::totally_ordered T, std::totally_ordered_with<T> U>
+constexpr auto operator>(const compressed_pair<T, U>& lhs,
+                         const compressed_pair<T, U>& rhs) noexcept -> bool
+{
+    if (lhs.first() > rhs.first()) { return true; }
+    if (rhs.first() > lhs.first()) { return false; }
+
+    return lhs.second() > rhs.second();
+}
+
+template <std::totally_ordered T, std::totally_ordered_with<T> U>
+constexpr auto operator>=(const compressed_pair<T, U>& lhs,
+                          const compressed_pair<T, U>& rhs) noexcept -> bool
+{
+    return not(lhs < rhs);
+}
+
+template <std::totally_ordered T, std::totally_ordered_with<T> U>
+constexpr auto operator<(const compressed_pair<T, U>& lhs,
+                         const compressed_pair<T, U>& rhs) noexcept -> bool
+{
+    if (lhs.first() < rhs.first()) { return true; }
+    if (rhs.first() < lhs.first()) { return false; }
+
+    return lhs.second() < rhs.second();
+}
+
+template <std::totally_ordered T, std::totally_ordered_with<T> U>
+constexpr auto operator<=(const compressed_pair<T, U>& lhs,
+                          const compressed_pair<T, U>& rhs) noexcept -> bool
+{
+    return not(lhs > rhs);
+}
+
+
+
+
 // C++ structured binding support
 namespace std {
 
