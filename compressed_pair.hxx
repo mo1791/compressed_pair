@@ -621,8 +621,7 @@ struct tuple_element<Index, ::compressed_pair<T, U>> : public tuple_element<Inde
 
 
 template <std::size_t Index, detail::specialization_of<::compressed_pair> Compressed_Pair>
-constexpr auto get(Compressed_Pair&& pair) noexcept 
-    -> typename std::tuple_element<Index, typename std::decay<Compressed_Pair>::type>::type
+constexpr auto get(Compressed_Pair&& pair) noexcept -> decltype(auto)
 {
     if constexpr ( Index == 0 ) return std::forward<Compressed_Pair>(pair).first();
     if constexpr ( Index == 1 ) return std::forward<Compressed_Pair>(pair).second();
