@@ -254,16 +254,12 @@ public:
 
 public:
     // access first element of a pair
-    constexpr auto first() const noexcept -> const first_type& { return *this; }
-    constexpr auto first()       noexcept ->       first_type& { return *this; }
-
-    // access second element of a pair
-    constexpr auto second() const&  noexcept -> const second_type& { return m_second; }
-    constexpr auto second()   &     noexcept ->       second_type& { return m_second; }
+    template <typename Self>
+    constexpr auto first(this Self&& self) noexcept { return std::forward_like<Self>(self); }
     
-    constexpr auto second() const&& noexcept -> const second_type&& { return std::move(m_second); }
-    constexpr auto second()   &&    noexcept ->       second_type&& { return std::move(m_second); }
-
+    // access second element of a pair
+    template <typename Self>
+    constexpr auto second(this Self&& self) noexcept { return std::forward_like<Self>(self).m_second; }
 
 public:
     void swap(compressed_pair_impl& other) noexcept(
@@ -333,8 +329,8 @@ public:
                          std::is_nothrow_constructible<T2, U2>>::value)
         requires(std::conjunction<std::is_constructible<T1, U1>,
                                   std::is_constructible<T2, U2>>::value)
-        : T2(std::forward<U2>(second))
-        , m_first(std::forward<U1>(first))
+        : T2(std::forward_like<U2>(second))
+        , m_first(std::forward_like<U1>(first))
     {
     }
 
@@ -354,15 +350,13 @@ public:
 
 public:
     // access first element of a pair
-    constexpr auto first() const&  noexcept -> const first_type&  { return m_first; }
-    constexpr auto first()    &    noexcept ->       first_type&  { return m_first; }
-
-    constexpr auto first() const&& noexcept -> const first_type&& { return std::move(m_first); }
-    constexpr auto first()   &&    noexcept ->       first_type&& { return std::move(m_first); }
+    template <typename Self>
+    constexpr auto first(this Self&& self) noexcept { return std::forward_like<Self>(self).m_first; }
 
 
-    constexpr auto second() const noexcept -> const second_type& { return *this; }
-    constexpr auto second()       noexcept ->       second_type& { return *this; }
+    // access second element of a pair
+    template <typename Self>
+    constexpr auto second(this Self&& self) noexcept { return std::forward_like<Self>(self); }
 
 
 public:
@@ -423,20 +417,20 @@ public:
                          std::is_nothrow_constructible<T2, U2>>::value)
         requires(std::conjunction<std::is_constructible<T1, U1>,
                                   std::is_constructible<T2, U2>>::value)
-        : T1(std::forward<U1>(first))
-        , T2(std::forward<U2>(second)) 
+        : T1(std::forward_like<U1>(first))
+        , T2(std::forward_like<U2>(second)) 
     {
     }
 
 
 public:
     // access first element of a pair
-    constexpr auto first() const noexcept -> const first_type& { return *this; }
-    constexpr auto first()       noexcept ->       first_type& { return *this; }
+    template <typename Self>
+    constexpr auto first(this Self&& self) noexcept { return std::forward_like<Self>(self); }
 
     // access second element of a pair
-    constexpr auto second() const noexcept -> const second_type& { return *this; }
-    constexpr auto second()       noexcept ->       second_type& { return *this; }
+    template <typename Self>
+    constexpr auto second(this Self&& self) noexcept { return std::forward_like<Self>(self); }
 
 public:
     void swap(compressed_pair_impl& other) noexcept(
@@ -470,7 +464,7 @@ public:
 
 
 public:
-    using base_t::compressed_pair_impl;
+    using base_t::base_t;
 
 public:
     // Copy constructor
@@ -525,19 +519,14 @@ public:
 public:
 
     // access first element of a pair
-    constexpr auto first() const&  noexcept -> const first_type&  { return base_t::first(); }
-    constexpr auto first()    &    noexcept ->       first_type&  { return base_t::first(); }
-
-    constexpr auto first() const&& noexcept -> const first_type&& { return base_t::first(); }
-    constexpr auto first()   &&    noexcept ->       first_type&& { return base_t::first(); }
+    template <typename Self>
+    constexpr auto first(this Self&& self) noexcept { return std::forward_like<Self>(self).base_t::first(); }
 
 
     // access second element of a pair
-    constexpr auto second() const&  noexcept -> const second_type& { return base_t::second(); }
-    constexpr auto second()   &     noexcept ->       second_type& { return base_t::second(); }
-    
-    constexpr auto second() const&& noexcept -> const second_type&& { return base_t::second(); }
-    constexpr auto second()   &&    noexcept ->       second_type&& { return base_t::second(); }
+    template <typename Self>
+    constexpr auto second(this Self&& self) noexcept { return std::forward_like<Self>(self).base_t::second(); }
+
 
 public:
     void swap(compressed_pair& other) noexcept(
@@ -623,8 +612,8 @@ struct tuple_element<Index, ::compressed_pair<T, U>> : public tuple_element<Inde
 template <std::size_t Index, detail::specialization_of<::compressed_pair> Compressed_Pair>
 constexpr auto get(Compressed_Pair&& pair) noexcept -> decltype(auto)
 {
-    if constexpr ( Index == 0 ) return std::forward<Compressed_Pair>(pair).first();
-    if constexpr ( Index == 1 ) return std::forward<Compressed_Pair>(pair).second();
+    if constexpr ( Index == 0 ) return std::forward_like<Compressed_Pair>(pair).first();
+    if constexpr ( Index == 1 ) return std::forward_like<Compressed_Pair>(pair).second();
 }
 #endif
 
